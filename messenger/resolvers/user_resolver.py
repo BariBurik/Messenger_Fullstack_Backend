@@ -26,13 +26,9 @@ def decrypt_password(encrypted_password: str) -> str:
 
 
 def isAuthorized(info):
-    request = dict(info.context.scope['headers'])
-    print(request)
-    token = request.get(b'authorization', None)
-    print(token)
+    token = dict(info.context.scope['headers']).get(b'authorization', None)
     if not token:
         raise GraphQLError("Authorization token missing")
-    print(f"Received token: {token}")  # Отладочный вывод
 
     token = token.decode("utf-8")
     if token.startswith('Bearer '):
@@ -41,7 +37,6 @@ def isAuthorized(info):
     try:
         decode_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
         user_id = decode_token.get('id')
-        print(f"Decoded token: {decode_token}")  # Отладочный вывод
         if user_id is None:
             raise GraphQLError("Invalid refresh token")
 

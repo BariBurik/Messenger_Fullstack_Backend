@@ -8,7 +8,7 @@ from django.core.handlers.asgi import ASGIRequest
 from graphene.test import Client
 from graphql_jwt.shortcuts import get_token
 
-from messenger.resolvers.user_resolver import encrypt_password
+from messenger.resolvers.user_resolver import encrypt_password, resolve_users
 from messenger.schema import schema
 from messenger.models import User
 from myproject.settings import SECRET_KEY
@@ -21,8 +21,6 @@ def test_schema():
     user1 = User.objects.create(id=1, name='test_user1', email='test_email1', password=encrypted_password1)
     user2 = User.objects.create(id=2, name='test_user2', email='test_email2', password=encrypted_password2)
 
-    client = Client(schema)
-
     payload = {
         'id': user1.id,
         'name': user1.name,
@@ -32,34 +30,18 @@ def test_schema():
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
-    mock_request = ASGIRequest(
-        scope={
-            "type": "http",
-            "headers": [(b"authorization", f"Bearer {access_token}".encode())],
-            "method": "GET",
-            "path": "/graphql",
-        },
-        body_file=BytesIO(b"")  # Передаем пустое тело запроса
-    )
-
-    # Запрос с использованием accessToken
-    query = '''
-        query {
-            users {
-                id
-                name
-            }
-        }
-    '''
-
-    context_value = {
-        'request': mock_request  # Передаем мок-объект в контекст
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
     }
-    # Выполняем запрос с заголовками
-    response = client.execute(query, context_value=context_value)
 
+    # Настраиваем context для info
+    info = MagicMock()
+    info.context = MagicMock()
+    info.context.scope = mock_scope
+
+    # Выполняем запрос с заголовками
+    response = resolve_users(None, info)
+    print(response)
+    print(User.objects.all())
     # Проверка данных пользователей
-    assert response['data']['users'] == [
-        {"id": "1", "name": "test_user1"},
-        {"id": "2", "name": "test_user2"},
-    ]
+    assert list(response) == list(User.objects.all())

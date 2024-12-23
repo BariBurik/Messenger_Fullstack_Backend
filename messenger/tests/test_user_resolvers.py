@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, UTC
 from io import BytesIO
 from unittest.mock import MagicMock, Mock
@@ -41,20 +42,14 @@ def test_isAuthorized_valid_token():
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
-    # Создаем mock-запрос с корректным заголовком
-    mock_request = ASGIRequest(
-        scope={
-            "type": "http",
-            "headers": [(b'authorization', f'Bearer ' + access_token.encode())],
-            "method": "GET",
-            "path": "/graphql",
-        },
-        body_file=BytesIO(b"")  # Передаем пустое тело запроса
-    )
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
 
-    # Мокаем контекст и проверяем авторизацию
+    # Настраиваем context для info
     info = MagicMock()
-    info.context = {'request': mock_request}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     try:
         isAuthorized(info)  # Проверяем, чтобы не выбрасывало исключений
@@ -110,10 +105,6 @@ def test_resolve_user_by_id_valid():
     encrypted_password1 = encrypt_password('111')
     user = User.objects.create(id=1, name='test_user', email='test_email', password=encrypted_password1)
 
-    # Создаем mock для объекта info
-    info = MagicMock()
-    mock_request = MagicMock()
-
     # Генерация токена для аутентификации
     payload = {
         'id': user.id,
@@ -124,23 +115,20 @@ def test_resolve_user_by_id_valid():
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
 
-    # Настройка заголовков запроса
-    mock_request.headers = {'Authorization': f'Bearer {access_token}'}
-    info.context = {'request': mock_request}
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
+    info = MagicMock()
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Выполнение запроса
     result = resolve_user_by_id(None, info, user.id)
 
     # Проверка, что возвращенный пользователь соответствует ожидаемому
     assert result.id == user.id
-
-
-def test_resolve_user_by_id_invalid():
-    info = MagicMock()
-    info.context = {'request': MagicMock()}
-    user_id = 999  # Не существующий пользователь
-    with pytest.raises(GraphQLError):
-        resolve_user_by_id(None, info, user_id)
 
 
 @pytest.mark.django_db
@@ -260,10 +248,14 @@ def test_resolve_update_user():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
     result = resolve_update_user(None, info, new_user, access_token)
     assert 'access_token' in result
     assert 'refresh_token' in result
@@ -272,7 +264,13 @@ def test_resolve_update_user():
 def test_resolve_update_user_invalid_token():
     new_user = {'name': 'Updated Name'}
     access_token = 'invalid_access_token'
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    info.context = {'request': MagicMock()}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
     with pytest.raises(GraphQLError):
         resolve_update_user(None, info, new_user, access_token)

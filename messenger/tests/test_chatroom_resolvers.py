@@ -29,10 +29,14 @@ def test_resolve_user_chatrooms():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Выполняем запрос
     result = resolve_user_chatrooms(None, info, user.id)
@@ -56,10 +60,14 @@ def test_resolve_filter_not_created_chats():
     }
 
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
     resolve_chat_create(None, info,  {1: user1.id, 2: current_user.id})
     # Выполняем запрос
     result = resolve_filter_not_created_chats(None, info, current_user.id, 'user')
@@ -81,10 +89,14 @@ def test_resolve_chatroom_by_id():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Выполняем запрос
     result = resolve_chatroom_by_id(None, info, chatroom.id)
@@ -105,10 +117,14 @@ def test_resolve_chatroom_create():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Выполняем запрос
     result = resolve_chatroom_create(None, info, 'chatroom_1', {1: user1.id, 2: user2.id})
@@ -132,10 +148,14 @@ def test_resolve_chat_create():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Выполняем запрос
     result = resolve_chat_create(None, info, {1: user1.id, 2: user2.id})
@@ -159,10 +179,14 @@ def test_resolve_favorite_create():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Выполняем запрос
     result = resolve_favorite_create(None, info, {1: user.id})
@@ -189,10 +213,14 @@ def test_resolve_chatroom_update_success():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Пытаемся обновить чат (добавить пользователей)
     users_to_add = {1: user2.id}
@@ -219,10 +247,14 @@ def test_resolve_chat_delete():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    mock_scope = {
+        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
+    }
+
+    # Настраиваем context для info
     info = MagicMock()
-    request_mock = MagicMock()
-    request_mock.headers.get.return_value = f"Bearer {access_token}"
-    info.context = {'request': request_mock}
+    info.context = MagicMock()
+    info.context.scope = mock_scope
 
     # Выполняем запрос
     resolve_chatroom_delete(None, info, chatroom.id)

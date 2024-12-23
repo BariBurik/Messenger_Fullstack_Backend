@@ -27,11 +27,9 @@ def resolve_filter_not_created_chats(self, info, this_user_id, filter_name, tota
     chat_participants = Chat.objects.filter(name__icontains=filter_name, participants=this_user) \
         .values_list('name', flat=True) \
         .distinct()
-    print('All chats', chat_participants)
 
     # Получаем всех пользователей, чьи имена соответствуют фильтру
     filtered_users = User.objects.filter(name__icontains=filter_name).exclude(name=this_user.name)
-    print('USers with query', filtered_users)
 
     # Фильтруем пользователей, чьи имена уже есть среди участников чатов
     available_users = []
@@ -39,7 +37,6 @@ def resolve_filter_not_created_chats(self, info, this_user_id, filter_name, tota
         # Для каждого пользователя проверяем, встречается ли его имя в именах чатов
         if not any(user.name in chat_name for chat_name in chat_participants):
             available_users.append(user)
-    print('Users with query and without chats', available_users)
 
     # Ограничиваем выборку до total пользователей
     users_to_return = available_users[:total]
