@@ -70,7 +70,7 @@ def test_resolve_filter_not_created_chats():
     info.context.scope = mock_scope
     resolve_chat_create(None, info,  {1: user1.id, 2: current_user.id})
     # Выполняем запрос
-    result = resolve_filter_not_created_chats(None, info, current_user.id, 'user')
+    result = resolve_filter_not_created_chats(None, info, 'user')
 
     assert user1 not in result
     assert user2 in result

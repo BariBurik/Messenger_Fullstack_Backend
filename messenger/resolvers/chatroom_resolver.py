@@ -1,9 +1,11 @@
+import jwt
 from django.db.models import Q
 from graphql import GraphQLError
 from graphql_jwt.decorators import login_required
 
 from messenger.models import Chatroom, User, Chat, Favorite
 from messenger.resolvers.user_resolver import isAuthorized
+from myproject.settings import SECRET_KEY
 
 
 def resolve_user_chatrooms(self, info, user_id):
@@ -17,8 +19,24 @@ def resolve_filter_chatroom(self, info, search_query, total=5):
     return chats
 
 
-def resolve_filter_not_created_chats(self, info, this_user_id, filter_name, total=5):
+def resolve_filter_not_created_chats(self, info, filter_name, total=5):
     # Получаем текущего пользователя
+    isAuthorized(info)
+
+    try:
+        token = dict(info.context.scope['headers']).get(b'authorization', None)
+        if not token:
+            raise GraphQLError("Authorization token missing")
+
+        token = token.decode("utf-8")
+        if token.startswith('Bearer '):
+            token = token[7:]
+
+        decode_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        this_user_id = decode_token.get('id')
+    except jwt.ExpiredSignatureError:
+        raise GraphQLError("Token expired")
+
     try:
         this_user = User.objects.get(id=this_user_id)
     except User.DoesNotExist:

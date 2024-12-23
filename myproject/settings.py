@@ -39,7 +39,6 @@ INSTALLED_APPS = [
 
 
 MIDDLEWARE = [
-    'django.middleware.csrf.CsrfViewMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -131,6 +130,7 @@ ASGI_APPLICATION = "myproject.asgi.application"
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',  # Разрешаем доступ с фронтенд-сервера
+    'http://127.0.0.1:8000',
 ]
 
 CORS_ALLOW_CREDENTIALS = True  # Разрешаем отправку cookie, включая CSRF-токен
