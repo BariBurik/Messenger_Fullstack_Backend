@@ -19,7 +19,7 @@ def resolve_filter_chatroom(self, info, search_query, total=5):
     return chats
 
 
-def resolve_filter_not_created_chats(self, info, filter_name, total=5):
+def resolve_filter_not_created_chats(self, info, search_query, total=5):
     # Получаем текущего пользователя
     isAuthorized(info)
 
@@ -42,12 +42,12 @@ def resolve_filter_not_created_chats(self, info, filter_name, total=5):
     except User.DoesNotExist:
         raise GraphQLError("Invalid user id")
 
-    chat_participants = Chat.objects.filter(name__icontains=filter_name, participants=this_user) \
+    chat_participants = Chat.objects.filter(name__icontains=search_query, participants=this_user) \
         .values_list('name', flat=True) \
         .distinct()
 
     # Получаем всех пользователей, чьи имена соответствуют фильтру
-    filtered_users = User.objects.filter(name__icontains=filter_name).exclude(name=this_user.name)
+    filtered_users = User.objects.filter(name__icontains=search_query).exclude(name=this_user.name)
 
     # Фильтруем пользователей, чьи имена уже есть среди участников чатов
     available_users = []
