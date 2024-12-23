@@ -80,7 +80,7 @@ class ChatroomCreateUsersType(graphene.InputObjectType):
 class Query(graphene.ObjectType):
     users = graphene.List(UserType, resolver=resolve_users)
     user = graphene.Field(UserType, id=graphene.Int(), resolver=resolve_user_by_id)
-    users_without_chat_with_this_user = graphene.List(UserType, current_user_id=graphene.Int(), search_query=graphene.String(), total=graphene.Int(), resolver=resolve_filter_not_created_chats)
+    users_without_chat_with_this_user = graphene.List(UserType, search_query=graphene.String(), total=graphene.Int(), resolver=resolve_filter_not_created_chats)
 
     user_chatrooms = graphene.List(ChatroomType, user_id=graphene.Int(), resolver=resolve_user_chatrooms)
     chatroom = graphene.Field(ChatroomType, id=graphene.Int(), resolver=resolve_chatroom_by_id)
