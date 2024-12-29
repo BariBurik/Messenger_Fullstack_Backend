@@ -39,7 +39,7 @@ def test_resolve_user_chatrooms():
     info.context.scope = mock_scope
 
     # Выполняем запрос
-    result = resolve_user_chatrooms(None, info, user.id)
+    result = resolve_user_chatrooms(None, info)
 
     assert len(result) == 2
     assert chatroom1 in result
@@ -68,7 +68,7 @@ def test_resolve_filter_not_created_chats():
     info = MagicMock()
     info.context = MagicMock()
     info.context.scope = mock_scope
-    resolve_chat_create(None, info,  {1: user1.id, 2: current_user.id})
+    resolve_chat_create(None, info,  'user1')
     # Выполняем запрос
     result = resolve_filter_not_created_chats(None, info, 'user')
 
@@ -127,7 +127,7 @@ def test_resolve_chatroom_create():
     info.context.scope = mock_scope
 
     # Выполняем запрос
-    result = resolve_chatroom_create(None, info, 'chatroom_1', {1: user1.id, 2: user2.id})
+    result = resolve_chatroom_create(None, info, 'chatroom_1', {'user_2': user2.id})
 
     assert result.name == 'chatroom_1'
     assert user1 in result.participants.all()
@@ -158,7 +158,7 @@ def test_resolve_chat_create():
     info.context.scope = mock_scope
 
     # Выполняем запрос
-    result = resolve_chat_create(None, info, {1: user1.id, 2: user2.id})
+    result = resolve_chat_create(None, info, 'test_user2')
 
     assert result.participants.count() == 2
     assert result.name == 'test_user1 & test_user2'
@@ -189,7 +189,7 @@ def test_resolve_favorite_create():
     info.context.scope = mock_scope
 
     # Выполняем запрос
-    result = resolve_favorite_create(None, info, {1: user.id})
+    result = resolve_favorite_create(None, info)
 
     assert result.participants.count() == 1
     assert user in result.participants.all()

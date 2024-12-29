@@ -9,7 +9,7 @@ from graphene.test import Client
 from graphql_jwt.shortcuts import get_token
 
 from messenger.resolvers.user_resolver import encrypt_password, resolve_users
-from messenger.schema import schema
+from messenger.graphene import graphene_schema
 from messenger.models import User
 from myproject.settings import SECRET_KEY
 

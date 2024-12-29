@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 import websockets
 
-from messenger.subscription import notify_new_message, UserType, MessageType
+from messenger.strawberry import notify_new_message, UserType, MessageType
 
 
 class FakeWebSocket:

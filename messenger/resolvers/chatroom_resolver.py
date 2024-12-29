@@ -1,41 +1,19 @@
-import jwt
-from django.db.models import Q
 from graphql import GraphQLError
-from graphql_jwt.decorators import login_required
-
 from messenger.models import Chatroom, User, Chat, Favorite
-from messenger.resolvers.user_resolver import isAuthorized
-from myproject.settings import SECRET_KEY
 
 
-def resolve_user_chatrooms(self, info, user_id):
-    isAuthorized(info)
-    return Chatroom.objects.filter(participants=user_id)
+def resolve_user_chatrooms(self, info):
+    this_user = info.context.get('user')
+    return Chatroom.objects.filter(participants=this_user.id)
 
 
-def resolve_filter_chatroom(self, info, search_query, total=5):
-    isAuthorized(info)
-    chats = Chatroom.objects.filter(name__icontains=search_query)[:total]
+def resolve_filter_chatroom(self, info, search_query=None, total=5):
+    chats = Chat.objects.filter(name__icontains=search_query)[:total]
     return chats
 
 
-def resolve_filter_not_created_chats(self, info, search_query, total=5):
-    # Получаем текущего пользователя
-    isAuthorized(info)
-
-    try:
-        token = dict(info.context.scope['headers']).get(b'authorization', None)
-        if not token:
-            raise GraphQLError("Authorization token missing")
-
-        token = token.decode("utf-8")
-        if token.startswith('Bearer '):
-            token = token[7:]
-
-        decode_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        this_user_id = decode_token.get('id')
-    except jwt.ExpiredSignatureError:
-        raise GraphQLError("Token expired")
+def resolve_filter_not_created_chats(self, info, search_query=None, total=5):
+    this_user_id = info.context.get('user').id
 
     try:
         this_user = User.objects.get(id=this_user_id)
@@ -63,16 +41,16 @@ def resolve_filter_not_created_chats(self, info, search_query, total=5):
 
 
 def resolve_chatroom_by_id(self, info, id):
-    isAuthorized(info)
     return Chatroom.objects.get(id=id)
 
 
 def resolve_chatroom_create(self, info, name, users):
-    isAuthorized(info)
+    this_user_id = info.context.get('user').id
     try:
         user_ids = list(users.values())
 
         user_objects = [User.objects.get(id=user_id) for user_id in user_ids]
+        user_objects += [this_user_id]
         chatroom = Chatroom.objects.create(name=name)
         chatroom.participants.set(user_objects)
         return chatroom
@@ -87,18 +65,21 @@ def resolve_chatroom_create(self, info, name, users):
         raise GraphQLError(f"An error occurred: {str(e)}")  # Обработка других ошибок
 
 
-def resolve_chat_create(self, info, users):
-    isAuthorized(info)
+def resolve_chat_create(self, info, user_name):
+    this_user_id = info.context.get('user').id
+    other_user_id = User.objects.get(name=user_name).id
+
+    if not other_user_id:
+        raise GraphQLError("Invalid user name")
+
+    if this_user_id == other_user_id:
+        raise GraphQLError("Cannot create chat with yourself")
+
     try:
-        user_ids = list(users.values())
-
-        if len(user_ids) > 2:
-            raise GraphQLError("Invalid number of users")
-
-        if Chat.objects.filter(participants=user_ids[0]).filter(participants=user_ids[1]).distinct():
+        if Chat.objects.filter(participants=this_user_id).filter(participants=other_user_id).distinct():
             raise GraphQLError("Chat already exists")
 
-        user_objects = [User.objects.get(id=user_id) for user_id in user_ids]
+        user_objects = [this_user_id, other_user_id]
         chat = Chat.objects.create()
         chat.participants.add(*user_objects)
         chat.name = f"{chat.participants.first().name} & {chat.participants.last().name}"
@@ -115,21 +96,15 @@ def resolve_chat_create(self, info, users):
         raise GraphQLError(f"An error occurred: {str(e)}")  # Обработка других ошибок
 
 
-def resolve_favorite_create(self, info, users):
-    isAuthorized(info)
+def resolve_favorite_create(self, info):
+    this_user_id = info.context.get('user')
     try:
-        user_ids = list(users.values())
-
-        if len(user_ids) > 1:
-            raise GraphQLError("Invalid number of users")
-
-        if Favorite.objects.filter(participants=user_ids[0]).exists():
+        if Favorite.objects.filter(participants=this_user_id).exists():
             raise GraphQLError("Favorite already exists")
 
-        user_objects = [User.objects.get(id=user_id) for user_id in user_ids]
-
         favorite = Favorite.objects.create()
-        favorite.participants.set(user_objects)
+        favorite.participants.set([this_user_id])
+        favorite.name = "Избранные"
         return favorite
 
     except User.DoesNotExist:
@@ -142,17 +117,32 @@ def resolve_favorite_create(self, info, users):
         raise GraphQLError(f"An error occurred: {str(e)}")  # Обработка других ошибок
 
 
-def resolve_chatroom_update(self, info, id, users, name=None):
-    isAuthorized(info)
+def resolve_chatroom_update(self, info, id, users=None, name=None, avatar=None):
     try:
-        user_ids = list(users.values())
-        chatroom = Chatroom.objects.filter(id=id).first()
-        if chatroom.participants.all().count() + len(user_ids) > 8:
-            raise GraphQLError("Invalid number of users")
+        # Проверяем существование чата
+        chatroom = Chatroom.objects.get(id=id)
+        if not chatroom:
+            raise GraphQLError("Chatroom does not exist")
+
+        # Добавляем участников
+        if users:
+            user_ids = list(users.values())
+
+            if chatroom.participants.all().count() + len(user_ids) > 8:
+                raise GraphQLError("Invalid number of users")
+
+            user_objects = [User.objects.get(id=user_id) for user_id in user_ids]
+            chatroom.participants.add(*user_objects)
+
+        # Обновляем имя чата
         if name:
-            chatroom.name = name
-        user_objects = [User.objects.get(id=user_id) for user_id in user_ids]
-        chatroom.participants.add(*user_objects)
+            if  Chatroom.objects.filter(name=name).exists():
+                raise GraphQLError("Chatroom already exists")
+            Chatroom.objects.filter(name=name).exists()
+
+        if avatar:
+            chatroom.avatar = avatar
+
         chatroom.save()
         return chatroom
 
@@ -167,8 +157,6 @@ def resolve_chatroom_update(self, info, id, users, name=None):
 
 
 def resolve_chatroom_delete(self, info, id):
-    isAuthorized(info)  # Проверка авторизации
-
     try:
         # Получаем объект чата по ID (если он существует)
         chatroom = Chatroom.objects.get(id=id)

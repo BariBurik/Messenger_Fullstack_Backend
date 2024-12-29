@@ -3,16 +3,15 @@ from typing import AsyncGenerator
 
 import graphene
 from graphene_django.types import DjangoObjectType
+
 from .models import User, Chat, Chatroom, Favorite, Message
-from .resolvers.message_resolver import resolve_send_message, resolve_chatroom_message
+from .resolvers.message_resolver import resolve_send_message, resolve_get_messages
 
 from .resolvers.user_resolver import resolve_users, resolve_user_by_id, resolve_user_register, resolve_user_login, \
-    resolve_update_user, resolve_access_token, isAuthorized
+    resolve_update_user, resolve_access_token, resolve_get_self
 from .resolvers.chatroom_resolver import resolve_chatroom_by_id, resolve_user_chatrooms, \
     resolve_chatroom_create, resolve_favorite_create, resolve_chat_create, \
-    resolve_filter_chatroom, resolve_filter_not_created_chats, resolve_chatroom_delete, resolve_chatroom_update, \
-    get_id_from_token
-from .subscription import notify_new_message
+    resolve_filter_chatroom, resolve_filter_not_created_chats, resolve_chatroom_delete, resolve_chatroom_update
 
 
 class UserType(DjangoObjectType):
@@ -121,7 +120,9 @@ class Query(graphene.ObjectType):
     chatroom = graphene.Field(ChatroomType, id=graphene.Int(), resolver=resolve_chatroom_by_id)
     filtered_chatrooms = graphene.List(ChatroomType, total=graphene.Int(),
                                        search_query=graphene.String(),
-                                       resolver=resolve_filter_chatroom)
+                                       resolver=resolve_filter_chatroom),
+    get_messages = graphene.List(MessageType, chatroom_name=graphene.String(), resolver=resolve_get_messages)
+    get_self = graphene.Field(UserType, resolver=resolve_get_self)
 
 
 class Mutation(graphene.ObjectType):

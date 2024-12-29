@@ -2,13 +2,16 @@ from datetime import datetime, timedelta, UTC
 from venv import logger
 
 import jwt
+from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from graphql import GraphQLError
 from graphql_jwt.decorators import login_required
+from starlette.responses import JSONResponse
 
 from messenger.models import User
 from cryptography.fernet import Fernet
+
 from myproject.settings import SECRET_KEY
 
 key = b'wZIuD0dSRXfDRYkr0MUSxr2j7e8JZphNv1CZkJDNHyA='
@@ -25,28 +28,9 @@ def decrypt_password(encrypted_password: str) -> str:
     return decrypted_password
 
 
-def isAuthorized(info):
-    token = dict(info.context.scope['headers']).get(b'authorization', None)
-    if not token:
-        raise GraphQLError("Authorization token missing")
-
-    token = token.decode("utf-8")
-    if token.startswith('Bearer '):
-        token = token[7:]
-
-    try:
-        decode_token = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user_id = decode_token.get('id')
-        if user_id is None:
-            raise GraphQLError("Invalid refresh token")
-
-        user = User.objects.get(id=user_id)
-        if user is None:
-            raise GraphQLError("Invalid refresh token")
-    except jwt.ExpiredSignatureError:
-        raise GraphQLError("Token expired")
-    except jwt.InvalidTokenError:
-        raise GraphQLError("Invalid token")
+def resolve_get_self(self, info):
+    user = info.context.get('user')
+    return user
 
 
 def refresh_access_token(refresh_token):
@@ -69,18 +53,23 @@ def refresh_access_token(refresh_token):
             'iat': datetime.now(UTC)
         }
         token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-        return token
+        response = JSONResponse({"message": "User registered successfully"})
+
+        response.set_cookie(
+            "access-token", token, httponly=True, samesite="none", secure=True
+        )
+
+        return response
+
     except jwt.ExpiredSignatureError:
         raise GraphQLError("Refresh token expired")
 
 
 def resolve_users(self, info):
-    isAuthorized(info)
     return User.objects.all()
 
 
 def resolve_user_by_id(self, info, id):
-    isAuthorized(info)
     return User.objects.get(id=id)
 
 
@@ -136,10 +125,16 @@ def resolve_user_register(self, info, user):
     }
     refresh_token = jwt.encode(refresh_payload, SECRET_KEY, algorithm='HS256')
 
-    return {
-        'access_token': access_token,
-        'refresh_token': refresh_token
-    }
+    response = JSONResponse({"message": "User registered successfully"})
+
+    response.set_cookie(
+        "access-token", access_token, httponly=True, samesite="none", secure=True
+    )
+    response.set_cookie(
+        "refresh-token", refresh_token, httponly=True, samesite="none", secure=True
+    )
+
+    return response
 
 
 def resolve_user_login(self, info, email, password):
@@ -177,17 +172,20 @@ def resolve_user_login(self, info, email, password):
         }
         refresh_token = jwt.encode(refresh_payload, SECRET_KEY, algorithm='HS256')
 
-        return {
-            'access_token': access_token,
-            'refresh_token': refresh_token
-        }
+        response = JSONResponse({"message": "User login successfully"})
+
+        response.set_cookie(
+            "access-token", access_token, httponly=True, samesite="none", secure=True
+        )
+        response.set_cookie(
+            "refresh-token", refresh_token, httponly=True, samesite="none", secure=True
+        )
+
+        return response
 
     except GraphQLError as gql_err:
-        # Пропускаем GraphQLError как есть
-        logger.error(f"GraphQL error: {str(gql_err)}")
         raise gql_err
     except Exception as e:
-        # Логирование неизвестной ошибки
         logger.exception("Unexpected error during user login")
         raise GraphQLError("An unexpected error occurred.")
 
@@ -202,21 +200,15 @@ def resolve_access_token(self, info, refresh_token):
         raise GraphQLError(str(e))
 
 
-def resolve_update_user(self, info, new_user, access_token):
-    isAuthorized(info)
-    decode_refresh_token = jwt.decode(access_token, SECRET_KEY, algorithms=['HS256'])
-    user_id = decode_refresh_token.get('id')
-    if user_id is None:
-        raise GraphQLError("Invalid access token")
-
-    user = User.objects.get(id=user_id)
+def resolve_update_user(self, info, new_user):
+    user = info.context.get('user')
     if user is None:
         raise GraphQLError("Invalid access token")
 
     updated_data = {}
     if new_user.get('name'):  # Если имя не пустое, обновляем его
         if len(new_user.get('name')) > 4:
-            if User.objects.filter(name=new_user['name']).exclude(id=user_id):
+            if User.objects.filter(name=new_user['name']).exclude(id=user.id):
                 raise GraphQLError("User with this name already exists")
             updated_data['name'] = new_user['name']
         else:
@@ -226,7 +218,7 @@ def resolve_update_user(self, info, new_user, access_token):
             validate_email(new_user.get('email'))
         except ValidationError:
             raise GraphQLError("Invalid email")
-        if User.objects.filter(email=new_user['email']).exclude(id=user_id):
+        if User.objects.filter(email=new_user['email']).exclude(id=user.id):
             raise GraphQLError("User with this email already exists")
         updated_data['email'] = new_user['email']
     if new_user.get('password'):  # Если пароль не пустой, обновляем его
@@ -235,10 +227,10 @@ def resolve_update_user(self, info, new_user, access_token):
         else:
             raise GraphQLError("Name must be more than 4 characters")
 
-    User.objects.filter(id=user_id).update(**updated_data)
+    User.objects.filter(id=user.id).update(**updated_data)
 
     # Получаем обновленного пользователя
-    updated_user = User.objects.get(id=user_id)
+    updated_user = User.objects.get(id=user.id)
 
     payload = {
         'id': updated_user.id,
@@ -259,7 +251,13 @@ def resolve_update_user(self, info, new_user, access_token):
 
     refresh_token = jwt.encode(refresh_payload, SECRET_KEY, algorithm='HS256')
 
-    return {
-        'access_token': access_token,
-        'refresh_token': refresh_token
-    }
+    response = JSONResponse({"message": "User update successfully"})
+
+    response.set_cookie(
+        "access-token", access_token, httponly=True, samesite="none", secure=True
+    )
+    response.set_cookie(
+        "refresh-token", refresh_token, httponly=True, samesite="none", secure=True
+    )
+
+    return response

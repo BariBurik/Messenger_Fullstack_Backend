@@ -154,7 +154,8 @@ CSRF_COOKIE_SECURE = False
 GRAPHENE = {
     "SCHEMA": "messenger.schema.schema",
     "MIDDLEWARE": [
-        'graphql_jwt.middleware.JSONWebTokenMiddleware'
+        'graphql_jwt.middleware.JSONWebTokenMiddleware',
+        "messenger.middlewares.GrapheneAuthMiddleware",
     ],
     'EXECUTOR': 'graphql.execution.executors.asyncio.AsyncioExecutor',
     'CONTEXT': 'myproject.context.get_context'

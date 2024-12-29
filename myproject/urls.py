@@ -19,10 +19,14 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 from graphene_django.views import GraphQLView
+from strawberry.django.views import AsyncGraphQLView
 
-from messenger.schema import schema
+from messenger.graphene import graphene_schema
+from messenger.middlewares import StrawberryAuthMiddleware
+from messenger.strawberry import schema as strawberry_schema
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('graphql/', GraphQLView.as_view(graphiql=True, schema=schema)),
+    path("graphql/graphene/", GraphQLView.as_view(graphiql=True, schema=graphene_schema)),
+    path("graphql/strawberry/", StrawberryAuthMiddleware(AsyncGraphQLView.as_view(schema=strawberry_schema))),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
