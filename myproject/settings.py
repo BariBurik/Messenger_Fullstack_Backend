@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from corsheaders.defaults import default_headers
@@ -33,16 +34,17 @@ INSTALLED_APPS = [
     'graphene_django',
     'channels',
     'corsheaders',
+    'graphene_file_upload',
 
     'messenger'
 ]
 
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -128,10 +130,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #
 ASGI_APPLICATION = "myproject.asgi.application"
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',  # Разрешаем доступ с фронтенд-сервера
-    'http://127.0.0.1:8000',
-]
+CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ALLOW_CREDENTIALS = True  # Разрешаем отправку cookie, включая CSRF-токен
 CORS_ALLOW_HEADERS = [
@@ -150,6 +149,9 @@ CSRF_COOKIE_NAME = 'csrftoken'
 CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+CORS_EXPOSE_HEADERS = ["Set-Cookie", "Date"]
 
 GRAPHENE = {
     "SCHEMA": "messenger.schema.schema",
@@ -162,5 +164,7 @@ GRAPHENE = {
 }
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+AUTH_USER_MODEL = 'messenger.User'
 

@@ -3,6 +3,8 @@ from datetime import datetime, UTC, timedelta
 import jwt
 import pytest
 from unittest.mock import MagicMock
+
+from messenger.middlewares import AuthMiddleware
 from messenger.resolvers.chatroom_resolver import resolve_user_chatrooms, \
     resolve_filter_chatroom, resolve_filter_not_created_chats, resolve_chatroom_by_id, resolve_chatroom_create, \
     resolve_chat_create, resolve_favorite_create, resolve_chatroom_update, resolve_chatroom_delete
@@ -29,14 +31,21 @@ def test_resolve_user_chatrooms():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = user
+    info.context.request.user = mock_user
 
     # Выполняем запрос
     result = resolve_user_chatrooms(None, info)
@@ -60,14 +69,21 @@ def test_resolve_filter_not_created_chats():
     }
 
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = current_user
+    info.context.request.user = mock_user
     resolve_chat_create(None, info,  'user1')
     # Выполняем запрос
     result = resolve_filter_not_created_chats(None, info, 'user')
@@ -89,14 +105,21 @@ def test_resolve_chatroom_by_id():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = user
+    info.context.request.user = mock_user
 
     # Выполняем запрос
     result = resolve_chatroom_by_id(None, info, chatroom.id)
@@ -117,14 +140,21 @@ def test_resolve_chatroom_create():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = user1
+    info.context.request.user = mock_user
 
     # Выполняем запрос
     result = resolve_chatroom_create(None, info, 'chatroom_1', {'user_2': user2.id})
@@ -138,7 +168,6 @@ def test_resolve_chatroom_create():
 def test_resolve_chat_create():
     user1 = User.objects.create(id=1, name='test_user1', email='test_email1')
     user2 = User.objects.create(id=2, name='test_user2', email='test_email2')
-    user3 = User.objects.create(id=3, name='test_user3', email='test_email3')
 
     payload = {
         'id': user1.id,
@@ -148,14 +177,21 @@ def test_resolve_chat_create():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = user1
+    info.context.request.user = mock_user
 
     # Выполняем запрос
     result = resolve_chat_create(None, info, 'test_user2')
@@ -164,7 +200,6 @@ def test_resolve_chat_create():
     assert result.name == 'test_user1 & test_user2'
     assert user1 in result.participants.all()
     assert user2 in result.participants.all()
-
 
 
 @pytest.mark.django_db
@@ -179,14 +214,21 @@ def test_resolve_favorite_create():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = user
+    info.context.request.user = mock_user
 
     # Выполняем запрос
     result = resolve_favorite_create(None, info)
@@ -213,14 +255,21 @@ def test_resolve_chatroom_update_success():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = user
+    info.context.request.user = mock_user
 
     # Пытаемся обновить чат (добавить пользователей)
     users_to_add = {1: user2.id}
@@ -234,7 +283,6 @@ def test_resolve_chatroom_update_success():
 @pytest.mark.django_db
 def test_resolve_chat_delete():
     user1 = User.objects.create(id=1, name='test_user1', email='test_email1')
-    user2 = User.objects.create(id=2, name='test_user2', email='test_email2')
 
     chatroom = Chatroom.objects.create(id=1, name="Test Chat")
     chatroom.participants.add(user1)
@@ -247,14 +295,21 @@ def test_resolve_chat_delete():
         'iat': datetime.now(UTC)
     }
     access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
-
-    # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = user1
+    info.context.request.user = mock_user
 
     # Выполняем запрос
     resolve_chatroom_delete(None, info, chatroom.id)

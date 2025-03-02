@@ -1,123 +1,43 @@
 from datetime import datetime, UTC
 
 import jwt
-from asgiref.sync import sync_to_async
-from graphql import GraphQLResolveInfo
-from jwt import decode, ExpiredSignatureError, InvalidTokenError
-from strawberry import Info
+from graphql import GraphQLError
+from jwt import InvalidTokenError
 
 from messenger.models import User
+from messenger.resolvers.user_resolver import refresh_access_token
 from myproject.settings import SECRET_KEY
 
 
-@sync_to_async
 def get_user_from_token(token):
     try:
         # Раскодируем токен
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        user_id = payload.get("user_id")
+        user_id = payload.get("id")
         if not user_id:
             raise InvalidTokenError("Token does not contain a user ID")
 
         # Получаем пользователя из базы данных
         try:
             user = User.objects.get(id=user_id)
+            exp = payload.get("exp")
+            if exp < datetime.now(UTC).timestamp():
+                raise InvalidTokenError("Token expired")
+            return user
         except User.DoesNotExist:
             raise InvalidTokenError("User not found")
-
-        # Проверяем срок действия токена (если не используется валидация на уровне JWT)
-        exp = payload.get("exp")
-        if exp and datetime.fromtimestamp(exp) < datetime.now(UTC):
-            raise InvalidTokenError("Token has expired")
-
-        return user
-    except jwt.ExpiredSignatureError:
-        raise InvalidTokenError("Token has expired")
     except jwt.InvalidTokenError:
         raise InvalidTokenError("Invalid token")
-
-
-def get_user_from_token_sync(token):
-    try:
-        # Раскодируем токен
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        user_id = payload.get("user_id")
-        if not user_id:
-            raise InvalidTokenError("Token does not contain a user ID")
-
-        # Получаем пользователя из базы данных
-        try:
-            user = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            raise InvalidTokenError("User not found")
-
-        # Проверяем срок действия токена (если не используется валидация на уровне JWT)
-        exp = payload.get("exp")
-        if exp and datetime.fromtimestamp(exp) < datetime.now(UTC):
-            raise InvalidTokenError("Token has expired")
-
-        return user
-    except jwt.ExpiredSignatureError:
-        raise InvalidTokenError("Token has expired")
-    except jwt.InvalidTokenError:
-        raise InvalidTokenError("Invalid token")
-
-
-class StrawberryAuthMiddleware:
-    def __init__(self, app, excluded_resolvers=None):
-        self.excluded_resolvers = excluded_resolvers or [
-            "resolve_user_login",
-            "resolve_user_register",
-            "refresh_access_token",
-        ]
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        headers = dict(scope['headers'])
-        if b'cookie' in headers:
-            cookies = headers[b'cookie'].decode().split('; ')
-            for cookie in cookies:
-                if cookie.startswith('access_token='):
-                    token = cookie.split('=')[1]
-                    scope['user'] = await get_user_from_token(token)
-                    break
-            else:
-                scope['user'] = None
-
-        return await self.app(scope, receive, send)
-
-    async def resolve_strawberry(self, next_, root, info, **kwargs):
-        if info.field_name in self.excluded_resolvers:
-            return await next_(root, info, **kwargs)
-
-        request = info.context["request"]
-        cookies = request.headers.get("cookie", "")
-        access_token = None
-
-        for cookie in cookies.split('; '):
-            if cookie.startswith("access_token="):
-                access_token = cookie.split("=")[1]
-
-        if access_token:
-            try:
-                user = await get_user_from_token(access_token)
-                info.context["user"] = user
-            except Exception:
-                info.context["user"] = None
-        else:
-            info.context["user"] = None
-
-        return await next_(root, info, **kwargs)
 
 
 class GrapheneAuthMiddleware:
-    def __init__(self, app, excluded_resolvers=None):
+    def __init__(self, excluded_resolvers=None):
         self.excluded_resolvers = excluded_resolvers or [
-            "resolve_user_login",
-            "resolve_user_register",
-            "refresh_access_token",
+            "userLogin",
+            "userRegister",
+            "__typename",
+            "message"
         ]
-        self.app = app
 
     def resolve(self, next, root, info, **kwargs):
         if info.field_name in self.excluded_resolvers:
@@ -126,18 +46,46 @@ class GrapheneAuthMiddleware:
         request = info.context
         cookies = request.headers.get("cookie", "")
         access_token = None
+        refresh_token = None
 
         for cookie in cookies.split('; '):
-            if cookie.startswith("access_token="):
+            if cookie.startswith("access-token="):
                 access_token = cookie.split("=")[1]
-
+            if cookie.startswith("refresh-token="):
+                refresh_token = cookie.split("=")[1]
         if access_token:
             try:
-                user = get_user_from_token_sync(access_token)
-                info.context["user"] = user
-            except Exception:
-                info.context["user"] = None
+                user = get_user_from_token(access_token)
+                request.user = user
+            except InvalidTokenError as e:
+                # Если access_token истек, пытаемся обновить его с помощью refresh_token
+                if refresh_token:
+                    try:
+                        new_access_token = refresh_access_token(refresh_token)
+                        request.user = get_user_from_token(new_access_token)
+                        request._access_token = new_access_token
+                        request._refresh_token = refresh_token
+                    except InvalidTokenError:
+                        request.user = None
+                        raise GraphQLError("Unauthorized: Both access token and refresh token are invalid.")
+                else:
+                    request.user = None
+                    raise GraphQLError("Unauthorized: Access token expired and no refresh token provided.")
         else:
-            info.context["user"] = None
+            if refresh_token:
+                try:
+                    new_access_token = refresh_access_token(refresh_token)
+                    print(new_access_token)
+                    request.user = get_user_from_token(new_access_token)
+                    print(request.user)
+                    request._access_token = new_access_token
+                    print(request._access_token)
+                    request._refresh_token = refresh_token
+                    print(request._refresh_token)
 
+                except ValueError:
+                    request.user = None
+            else:
+                request.user = None
+                raise GraphQLError("Unauthorized")
         return next(root, info, **kwargs)

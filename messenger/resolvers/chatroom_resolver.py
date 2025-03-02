@@ -1,24 +1,24 @@
+import asyncio
+
+from asgiref.sync import sync_to_async, async_to_sync
 from graphql import GraphQLError
 from messenger.models import Chatroom, User, Chat, Favorite
+from messenger.strawberry import notify_new_chatroom, ChatroomTypeStrawberry, notify_chatroom_delete, \
+    notify_chatroom_update
 
 
 def resolve_user_chatrooms(self, info):
-    this_user = info.context.get('user')
+    this_user = info.context.user
     return Chatroom.objects.filter(participants=this_user.id)
 
 
 def resolve_filter_chatroom(self, info, search_query=None, total=5):
-    chats = Chat.objects.filter(name__icontains=search_query)[:total]
+    chats = Chatroom.objects.filter(name__icontains=search_query)[:total]
     return chats
 
 
 def resolve_filter_not_created_chats(self, info, search_query=None, total=5):
-    this_user_id = info.context.get('user').id
-
-    try:
-        this_user = User.objects.get(id=this_user_id)
-    except User.DoesNotExist:
-        raise GraphQLError("Invalid user id")
+    this_user = info.context.user
 
     chat_participants = Chat.objects.filter(name__icontains=search_query, participants=this_user) \
         .values_list('name', flat=True) \
@@ -40,19 +40,38 @@ def resolve_filter_not_created_chats(self, info, search_query=None, total=5):
     return users_to_return
 
 
-def resolve_chatroom_by_id(self, info, id):
-    return Chatroom.objects.get(id=id)
+def resolve_chatroom_by_name(self, info, name):
+    return Chatroom.objects.get(name=name)
 
 
-def resolve_chatroom_create(self, info, name, users):
-    this_user_id = info.context.get('user').id
+def resolve_chatroom_create(self, info, name, users, avatar=None):
+    this_user_id = info.context.user.id
     try:
         user_ids = list(users.values())
 
         user_objects = [User.objects.get(id=user_id) for user_id in user_ids]
         user_objects += [this_user_id]
-        chatroom = Chatroom.objects.create(name=name)
+        if name:
+            chatroomCheck = Chatroom.objects.filter(name=name)
+            if chatroomCheck:
+                raise GraphQLError("Chatroom with this name already exists")
+            chatroom = Chatroom.objects.create(name=name)
         chatroom.participants.set(user_objects)
+        if avatar: chatroom.avatar = avatar
+        chatroom.save()
+
+        chatroom_strawberry = ChatroomTypeStrawberry(
+            id=chatroom.id,
+            name=chatroom.name,
+            avatar=chatroom.avatar,
+            participants=chatroom.participants.all(),
+            max_participants=chatroom.max_participants,
+            updated_at=chatroom.updated_at,
+            created_at=chatroom.created_at
+        )
+
+        async_to_sync(notify_new_chatroom)(chatroom_strawberry)
+
         return chatroom
 
     except User.DoesNotExist:
@@ -66,7 +85,7 @@ def resolve_chatroom_create(self, info, name, users):
 
 
 def resolve_chat_create(self, info, user_name):
-    this_user_id = info.context.get('user').id
+    this_user_id = info.context.user.id
     other_user_id = User.objects.get(name=user_name).id
 
     if not other_user_id:
@@ -97,7 +116,7 @@ def resolve_chat_create(self, info, user_name):
 
 
 def resolve_favorite_create(self, info):
-    this_user_id = info.context.get('user')
+    this_user_id = info.context.user.id
     try:
         if Favorite.objects.filter(participants=this_user_id).exists():
             raise GraphQLError("Favorite already exists")
@@ -105,6 +124,21 @@ def resolve_favorite_create(self, info):
         favorite = Favorite.objects.create()
         favorite.participants.set([this_user_id])
         favorite.name = "Избранные"
+        if (info.context.user.avatar): favorite.avatar = info.context.user.avatar
+        favorite.save()
+
+        chatroom_strawberry = ChatroomTypeStrawberry(
+            id=favorite.id,
+            name=favorite.name,
+            avatar=favorite.avatar,
+            participants=favorite.participants.all(),
+            max_participants=favorite.max_participants,
+            updated_at=favorite.updated_at,
+            created_at=favorite.created_at
+        )
+
+        async_to_sync(notify_new_chatroom)(chatroom_strawberry)
+
         return favorite
 
     except User.DoesNotExist:
@@ -128,20 +162,33 @@ def resolve_chatroom_update(self, info, id, users=None, name=None, avatar=None):
         if users:
             user_ids = list(users.values())
 
-            if chatroom.participants.all().count() + len(user_ids) > 8:
+            if len(user_ids) > 8:
                 raise GraphQLError("Invalid number of users")
 
             user_objects = [User.objects.get(id=user_id) for user_id in user_ids]
-            chatroom.participants.add(*user_objects)
+            user_objects.append(info.context.user)
+            chatroom.participants.set(user_objects)
 
         # Обновляем имя чата
         if name:
-            if  Chatroom.objects.filter(name=name).exists():
+            if Chatroom.objects.filter(name=name).exclude(id=id).exists():
                 raise GraphQLError("Chatroom already exists")
-            Chatroom.objects.filter(name=name).exists()
+            chatroom.name = name
 
         if avatar:
             chatroom.avatar = avatar
+
+        chatroom_strawberry = ChatroomTypeStrawberry(
+            id=chatroom.id,
+            name=chatroom.name,
+            avatar=chatroom.avatar,
+            participants=chatroom.participants.all(),
+            max_participants=chatroom.max_participants,
+            updated_at=chatroom.updated_at,
+            created_at=chatroom.created_at
+        )
+
+        async_to_sync(notify_chatroom_update)(chatroom_strawberry)
 
         chatroom.save()
         return chatroom
@@ -160,6 +207,18 @@ def resolve_chatroom_delete(self, info, id):
     try:
         # Получаем объект чата по ID (если он существует)
         chatroom = Chatroom.objects.get(id=id)
+
+        chatroom_strawberry = ChatroomTypeStrawberry(
+            id=chatroom.id,
+            name=chatroom.name,
+            avatar=chatroom.avatar,
+            participants=chatroom.participants.all(),
+            max_participants=chatroom.max_participants,
+            updated_at=chatroom.updated_at,
+            created_at=chatroom.created_at
+        )
+
+        async_to_sync(notify_chatroom_delete)(chatroom_strawberry)
 
         # Удаляем объект
         chatroom.delete()

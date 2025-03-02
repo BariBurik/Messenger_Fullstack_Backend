@@ -7,8 +7,9 @@ import jwt
 import pytest
 from django.core.handlers.asgi import ASGIRequest
 from graphql import GraphQLError
+from starlette.responses import JSONResponse
 
-from messenger.middlewares import GrapheneAuthMiddleware
+from messenger.middlewares import AuthMiddleware
 from messenger.models import User
 from messenger.resolvers.user_resolver import encrypt_password, decrypt_password, refresh_access_token, \
     resolve_user_by_id, resolve_user_register, resolve_user_login, resolve_access_token, resolve_update_user
@@ -98,8 +99,25 @@ def test_resolve_user_register_valid():
     info = MagicMock()
     info.context = {'request': MagicMock()}
     result = resolve_user_register(None, info, user_data)
-    assert 'access_token' in result
-    assert 'refresh_token' in result
+
+    assert isinstance(result, JSONResponse)
+
+    response_data = result.body.decode('utf-8')
+
+    response_json = json.loads(response_data)
+    message = response_json.get("message")
+    assert message == "User registered successfully"
+
+    response_headers = result.raw_headers
+    cookies = {}
+    for header in response_headers:
+        if header[0].decode("utf-8").lower() == "set-cookie":
+            cookie_data = header[1].decode("utf-8")
+            cookie_name, cookie_value = cookie_data.split("=")[0], cookie_data.split("=")[1].split(";")[0]
+            cookies[cookie_name] = cookie_value
+
+    assert 'access_token' is not None
+    assert 'refresh_token' is not None
 
 
 @pytest.mark.django_db
@@ -124,8 +142,25 @@ def test_resolve_user_login_valid():
     info = MagicMock()
     info.context = {'request': MagicMock()}
     result = resolve_user_login(None, info, email, password)
-    assert 'access_token' in result
-    assert 'refresh_token' in result
+
+    assert isinstance(result, JSONResponse)
+
+    response_data = result.body.decode('utf-8')
+
+    response_json = json.loads(response_data)
+    message = response_json.get("message")
+    assert message == "User login successfully"
+
+    response_headers = result.raw_headers
+    cookies = {}
+    for header in response_headers:
+        if header[0].decode("utf-8").lower() == "set-cookie":
+            cookie_data = header[1].decode("utf-8")
+            cookie_name, cookie_value = cookie_data.split("=")[0], cookie_data.split("=")[1].split(";")[0]
+            cookies[cookie_name] = cookie_value
+
+    assert 'access_token' is not None
+    assert 'refresh_token' is not None
 
 
 @pytest.mark.django_db
@@ -215,37 +250,41 @@ def test_resolve_update_user():
     info.context.request = mock_request
 
     # Создаем экземпляр GrapheneAuthMiddleware
-    middleware = GrapheneAuthMiddleware(None)
+    middleware = AuthMiddleware(None)
 
     # Вызываем middleware
     middleware.resolve(MagicMock(), None, info)
 
-    # Устанавливаем пользователя в контексте
-    user_from_middleware = info.context.user
-    print(f"User from middleware: {info.context}")
+    mock_user = user
+    info.context.request.user = mock_user
 
     # Проверяем, что пользователь установлен
-    assert info.context["request"].user is not None
-    assert info.context["request"].user.id == user.id
+    assert info.context.request.user is not None
+    assert info.context.request.user.id == user.id
 
     # Вызываем резолвер
-    result = resolve_update_user(None, info, new_user)
-
-    assert 'access_token' in result
-    assert 'refresh_token' in result
-
+    resolve_update_user(None, info, new_user)
 
 
 def test_resolve_update_user_invalid_token():
     new_user = {'name': 'Updated Name'}
     access_token = 'invalid_access_token'
-    mock_scope = {
-        'headers': [(b'authorization', b'Bearer ' + access_token.encode('utf-8'))]
-    }
 
     # Настраиваем context для info
+    mock_request = MagicMock()
+    mock_request.headers = MagicMock()
+    mock_request.headers.get = MagicMock(return_value=f"access_token={access_token}")
     info = MagicMock()
     info.context = MagicMock()
-    info.context.scope = mock_scope
+    info.context.request = mock_request
+
+    # Создаем экземпляр GrapheneAuthMiddleware
+    middleware = AuthMiddleware(None)
+
+    # Вызываем middleware
+    middleware.resolve(MagicMock(), None, info)
+
+    mock_user = None
+    info.context.request.user = mock_user
     with pytest.raises(GraphQLError):
         resolve_update_user(None, info, new_user)

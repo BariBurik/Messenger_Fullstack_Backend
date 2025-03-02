@@ -3,15 +3,18 @@ from typing import AsyncGenerator
 
 import graphene
 from graphene_django.types import DjangoObjectType
+from graphene_file_upload.scalars import Upload
 
+from myproject.context import get_context
 from .models import User, Chat, Chatroom, Favorite, Message
-from .resolvers.message_resolver import resolve_send_message, resolve_get_messages
+from .resolvers.message_resolver import resolve_send_message
 
 from .resolvers.user_resolver import resolve_users, resolve_user_by_id, resolve_user_register, resolve_user_login, \
-    resolve_update_user, resolve_access_token, resolve_get_self
-from .resolvers.chatroom_resolver import resolve_chatroom_by_id, resolve_user_chatrooms, \
+    resolve_update_user, resolve_re_login, resolve_get_users_per_query
+from .resolvers.chatroom_resolver import resolve_user_chatrooms, \
     resolve_chatroom_create, resolve_favorite_create, resolve_chat_create, \
-    resolve_filter_chatroom, resolve_filter_not_created_chats, resolve_chatroom_delete, resolve_chatroom_update
+    resolve_filter_chatroom, resolve_filter_not_created_chats, resolve_chatroom_delete, resolve_chatroom_update, \
+    resolve_chatroom_by_name
 
 
 class UserType(DjangoObjectType):
@@ -23,7 +26,7 @@ class UserType(DjangoObjectType):
 class ChatroomType(DjangoObjectType):
     class Meta:
         model = Chatroom
-        fields = ('id', 'name', 'participants', 'max_participants', 'created_at', 'updated_at')
+        fields = ('id', 'name', 'participants', 'avatar', 'max_participants', 'created_at', 'updated_at')
 
     participants = graphene.List(lambda: UserType)
 
@@ -76,27 +79,32 @@ class UserRegisterType(graphene.InputObjectType):
     name = graphene.String()
     email = graphene.String()
     password = graphene.String()
-    avatar = graphene.String(required=False)
+    avatar = Upload(required=False)
 
 
-class UserRegisterResponseType(graphene.ObjectType):
-    access_token = graphene.String()
-    refresh_token = graphene.String()
+class UserRespType(graphene.ObjectType):
+    id = graphene.Int()
+    name = graphene.String()
 
 
-class RefreshAccessTokenResponseType(graphene.ObjectType):
-    access_token = graphene.String()
+class ResponseType(graphene.ObjectType):
+    message = graphene.String()
 
 
-# class ChatUnion(graphene.Union):
-#     class Meta:
-#         types = (ChatroomType, ChatType, FavoriteType)
+class TempTokenType(graphene.ObjectType):
+    temp_token = graphene.String()
 
 
 class ChatroomCreateTypeOfChat(graphene.Enum):
     CHAT = 'chat'
     FAVORITE = 'favorite'
     CHATROOM = 'chatroom'
+
+
+class ReLoginResponseType(graphene.ObjectType):
+    message = graphene.String()
+    temp_token = graphene.String()
+    user = graphene.Field(UserType)
 
 
 class ChatroomCreateUsersType(graphene.InputObjectType):
@@ -109,6 +117,10 @@ class ChatroomCreateUsersType(graphene.InputObjectType):
     user_8 = graphene.Int()
 
 
+class MessagesCountType(graphene.ObjectType):
+    count = graphene.Int()
+
+
 class Query(graphene.ObjectType):
     users = graphene.List(UserType, resolver=resolve_users)
     user = graphene.Field(UserType, id=graphene.Int(), resolver=resolve_user_by_id)
@@ -117,29 +129,25 @@ class Query(graphene.ObjectType):
                                                       resolver=resolve_filter_not_created_chats)
 
     user_chatrooms = graphene.List(ChatroomType, resolver=resolve_user_chatrooms)
-    chatroom = graphene.Field(ChatroomType, id=graphene.Int(), resolver=resolve_chatroom_by_id)
+    chatroom = graphene.Field(ChatroomType, name=graphene.String(), resolver=resolve_chatroom_by_name)
     filtered_chatrooms = graphene.List(ChatroomType, total=graphene.Int(),
                                        search_query=graphene.String(),
-                                       resolver=resolve_filter_chatroom),
-    get_messages = graphene.List(MessageType, chatroom_name=graphene.String(), resolver=resolve_get_messages)
-    get_self = graphene.Field(UserType, resolver=resolve_get_self)
+                                       resolver=resolve_filter_chatroom)
+    user_re_login = graphene.Field(ReLoginResponseType, resolver=resolve_re_login)
+    get_users_per_query = graphene.List(UserType, search_query=graphene.String(), excludes=graphene.List(graphene.Int), resolver=resolve_get_users_per_query)
 
 
 class Mutation(graphene.ObjectType):
-    user_register = graphene.Field(UserRegisterResponseType, user=graphene.Argument(UserRegisterType),
+    user_register = graphene.Field(ResponseType, user=graphene.Argument(UserRegisterType),
                                    required=True,
                                    resolver=resolve_user_register)
-    user_login = graphene.Field(UserRegisterResponseType, email=graphene.String(),
+    user_login = graphene.Field(ResponseType, email=graphene.String(),
                                 password=graphene.String(),
                                 required=True, resolver=resolve_user_login)
-    user_update = graphene.Field(UserRegisterResponseType, access_token=graphene.String(),
-                                 new_user=UserRegisterType(),
+    user_update = graphene.Field(ResponseType, new_user=UserRegisterType(),
                                  resolver=resolve_update_user)
-    refresh_access_token = graphene.Field(RefreshAccessTokenResponseType, refresh_token=graphene.String(),
-                                          required=True,
-                                          resolver=resolve_access_token)
-
     chatroom_create = graphene.Field(ChatroomType, name=graphene.String(), users=ChatroomCreateUsersType(),
+                                     avatar=Upload(required=False),
                                      required=True,
                                      resolver=resolve_chatroom_create)
     chat_create = graphene.Field(ChatType, user_name=graphene.String(), required=True,
@@ -147,6 +155,7 @@ class Mutation(graphene.ObjectType):
     favorite_create = graphene.Field(FavoriteType, required=True,
                                      resolver=resolve_favorite_create)
     chatroom_update = graphene.Field(ChatroomType, id=graphene.Int(), name=graphene.String(), users=ChatroomCreateUsersType(),
+                                     avatar=Upload(required=False),
                                      required=True,
                                      resolver=resolve_chatroom_update)
     chatroom_delete = graphene.Field(ChatroomType, id=graphene.Int(),

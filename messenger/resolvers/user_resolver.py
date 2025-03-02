@@ -1,36 +1,38 @@
 from datetime import datetime, timedelta, UTC
 from venv import logger
-
 import jwt
-from asgiref.sync import sync_to_async
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from graphql import GraphQLError
-from graphql_jwt.decorators import login_required
 from starlette.responses import JSONResponse
 
 from messenger.models import User
-from cryptography.fernet import Fernet
 
 from myproject.settings import SECRET_KEY
 
-key = b'wZIuD0dSRXfDRYkr0MUSxr2j7e8JZphNv1CZkJDNHyA='
-fernet = Fernet(key)
+
+def create_access_token(user):
+    payload = {
+        'id': user.id,
+        'name': user.name,
+        'email': user.email,
+        'avatar': user.avatar.url if user.avatar else None,
+        'exp': datetime.now(UTC) + timedelta(minutes=60),
+        'iat': datetime.now(UTC)
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    return token
 
 
-def encrypt_password(password: str) -> str:
-    encrypted_password = fernet.encrypt(password.encode())
-    return encrypted_password.decode()  # Для хранения в базе данных в текстовом формате
-
-
-def decrypt_password(encrypted_password: str) -> str:
-    decrypted_password = fernet.decrypt(encrypted_password.encode()).decode()
-    return decrypted_password
-
-
-def resolve_get_self(self, info):
-    user = info.context.get('user')
-    return user
+def create_refresh_token(user):
+    payload = {
+        'id': user.id,
+        'exp': datetime.now(UTC) + timedelta(days=7),
+        'iat': datetime.now(UTC)
+    }
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    return token
 
 
 def refresh_access_token(refresh_token):
@@ -44,22 +46,9 @@ def refresh_access_token(refresh_token):
         if user is None:
             raise GraphQLError("Invalid refresh token")
 
-        payload = {
-            'id': user.id,
-            'name': user.name,
-            'email': user.email,
-            'avatar': user.avatar.url if user.avatar else None,
-            'exp': datetime.now(UTC) + timedelta(minutes=60),
-            'iat': datetime.now(UTC)
-        }
-        token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-        response = JSONResponse({"message": "User registered successfully"})
+        token = create_access_token(user)
 
-        response.set_cookie(
-            "access-token", token, httponly=True, samesite="none", secure=True
-        )
-
-        return response
+        return token
 
     except jwt.ExpiredSignatureError:
         raise GraphQLError("Refresh token expired")
@@ -78,6 +67,8 @@ def resolve_user_register(self, info, user):
     email = user['email']
     password = user['password']
     avatar = user.get('avatar', '')
+
+    request = info.context
 
     try:
         validate_email(email)
@@ -99,165 +90,126 @@ def resolve_user_register(self, info, user):
     if User.objects.filter(name=name).exists():
         raise GraphQLError("User with this name already exists")
 
-    encrypted_password = encrypt_password(password)
+    hashed_password = make_password(password)
 
     user = User.objects.create(
         name=name,
         email=email,
-        password=encrypted_password,
+        password=hashed_password,
         avatar=avatar
     )
 
-    payload = {
-        'id': user.id,
-        'name': user.name,
-        'email': user.email,
-        'avatar': user.avatar.url if user.avatar else '',
-        'exp': datetime.now(UTC) + timedelta(minutes=60),
-        'iat': datetime.now(UTC)
-    }
-    access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    access_token = create_access_token(user)
 
-    refresh_payload = {
-        'id': user.id,
-        'exp': datetime.now(UTC) + timedelta(days=7),
-        'iat': datetime.now(UTC)
-    }
-    refresh_token = jwt.encode(refresh_payload, SECRET_KEY, algorithm='HS256')
+    refresh_token = create_refresh_token(user)
 
-    response = JSONResponse({"message": "User registered successfully"})
+    request._access_token = access_token
+    request._refresh_token = refresh_token
 
-    response.set_cookie(
-        "access-token", access_token, httponly=True, samesite="none", secure=True
-    )
-    response.set_cookie(
-        "refresh-token", refresh_token, httponly=True, samesite="none", secure=True
-    )
-
-    return response
+    from messenger.graphene import ResponseType
+    return ResponseType("User successfully registered")
 
 
 def resolve_user_login(self, info, email, password):
     try:
+        request = info.context
+
         user = User.objects.filter(email=email).first()
 
         if user is None:
             raise GraphQLError("User with this email does not exist")
 
-        try:
-            # Дешифруем сохранённый пароль
-            decrypted_password = decrypt_password(user.password)
-        except Exception as e:
-            logger.error(f"Password decryption failed: {str(e)}")
-            raise GraphQLError(f"Password decryption failed: {str(e)}")
-
-        # Сравниваем расшифрованный пароль с введённым
-        if decrypted_password != password:
+        if not check_password(password, user.password):
             raise GraphQLError("Incorrect password")
 
-        payload = {
-            'id': user.id,
-            'name': user.name,
-            'email': user.email,
-            'avatar': user.avatar.url if user.avatar else '',
-            'exp': datetime.now(UTC) + timedelta(minutes=60),
-            'iat': datetime.now(UTC)
-        }
-        access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+        access_token = create_access_token(user)
 
-        refresh_payload = {
-            'id': user.id,
-            'exp': datetime.now(UTC) + timedelta(days=7),
-            'iat': datetime.now(UTC)
-        }
-        refresh_token = jwt.encode(refresh_payload, SECRET_KEY, algorithm='HS256')
+        refresh_token = create_refresh_token(user)
 
-        response = JSONResponse({"message": "User login successfully"})
+        request._access_token = access_token
+        request._refresh_token = refresh_token
 
-        response.set_cookie(
-            "access-token", access_token, httponly=True, samesite="none", secure=True
-        )
-        response.set_cookie(
-            "refresh-token", refresh_token, httponly=True, samesite="none", secure=True
-        )
-
-        return response
+        from messenger.graphene import ResponseType
+        return ResponseType("User logged in successfully")
 
     except GraphQLError as gql_err:
         raise gql_err
-    except Exception as e:
-        logger.exception("Unexpected error during user login")
-        raise GraphQLError("An unexpected error occurred.")
 
 
 def resolve_access_token(self, info, refresh_token):
     try:
-        new_access_token = refresh_access_token(refresh_token)
-        return {
-            'access_token': new_access_token
-        }
+        response = refresh_access_token(refresh_token)
+        return response
     except ValueError as e:
         raise GraphQLError(str(e))
 
 
 def resolve_update_user(self, info, new_user):
-    user = info.context.get('user')
+    user = info.context.user
     if user is None:
         raise GraphQLError("Invalid access token")
 
-    updated_data = {}
-    if new_user.get('name'):  # Если имя не пустое, обновляем его
+    request = info.context
+
+    if new_user.get('name'):
         if len(new_user.get('name')) > 4:
             if User.objects.filter(name=new_user['name']).exclude(id=user.id):
                 raise GraphQLError("User with this name already exists")
-            updated_data['name'] = new_user['name']
+            user.name = new_user['name']
         else:
             raise GraphQLError("Name must be more than 4 characters")
-    if new_user.get('email'):  # Если email не пустой, обновляем его
+
+    if new_user.get('email'):
         try:
             validate_email(new_user.get('email'))
         except ValidationError:
             raise GraphQLError("Invalid email")
         if User.objects.filter(email=new_user['email']).exclude(id=user.id):
             raise GraphQLError("User with this email already exists")
-        updated_data['email'] = new_user['email']
-    if new_user.get('password'):  # Если пароль не пустой, обновляем его
-        if len(new_user.get('password')) > 7:
-            updated_data['password'] = new_user['password']
-        else:
-            raise GraphQLError("Name must be more than 4 characters")
+        user.email = new_user['email']
 
-    User.objects.filter(id=user.id).update(**updated_data)
+    if new_user.get('password'):
+        if len(new_user.get('password')) > 7:
+            user.set_password(new_user['password'])
+        else:
+            raise GraphQLError("Password must be more than 7 characters")
+
+    if new_user.get('avatar'):
+        user.avatar = new_user['avatar']
+
+    user.save()
 
     # Получаем обновленного пользователя
     updated_user = User.objects.get(id=user.id)
 
-    payload = {
-        'id': updated_user.id,
-        'name': updated_user.name,
-        'email': updated_user.email,
-        'avatar': updated_user.avatar.url if user.avatar else '',
-        'exp': datetime.now(UTC) + timedelta(minutes=60),
-        'iat': datetime.now(UTC)
-    }
+    access_token = create_access_token(updated_user)
 
-    access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    refresh_token = create_refresh_token(updated_user)
 
-    refresh_payload = {
-        "id": updated_user.id,
-        'exp': datetime.now(UTC) + timedelta(days=7),
-        'iat': datetime.now(UTC)
-    }
+    request._access_token = access_token
+    request._refresh_token = refresh_token
 
-    refresh_token = jwt.encode(refresh_payload, SECRET_KEY, algorithm='HS256')
+    from messenger.graphene import ResponseType
+    return ResponseType("User successfully updated")
 
-    response = JSONResponse({"message": "User update successfully"})
 
-    response.set_cookie(
-        "access-token", access_token, httponly=True, samesite="none", secure=True
-    )
-    response.set_cookie(
-        "refresh-token", refresh_token, httponly=True, samesite="none", secure=True
-    )
+def resolve_re_login(self, info):
+    from messenger.graphene import ReLoginResponseType
+    user = info.context.user
+    if user:
+        temp_token = create_access_token(user)
+        return ReLoginResponseType(message="User logged in successfully", temp_token=temp_token, user=user)
 
-    return response
+    return ReLoginResponseType(message="User not logged in", temp_token=None, user=None)
+
+
+def resolve_get_users_per_query(self, info, search_query, excludes=None):
+    this_user = info.context.user
+    if not this_user:
+        raise GraphQLError("Invalid access token")
+    users = User.objects.filter(name__icontains=search_query).exclude(id=this_user.id)
+
+    if excludes:
+        users = users.exclude(id__in=excludes)
+
+    return users

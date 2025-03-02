@@ -13,8 +13,19 @@ class User(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    USERNAME_FIELD = 'name'  # Указываем поле, используемое для логина
+    REQUIRED_FIELDS = ['email', 'password']
+
     def __str__(self):
         return self.name
+
+    @property
+    def is_anonymous(self):
+        return False
+
+    @property
+    def is_authenticated(self):
+        return True
 
 
 class Chatroom(models.Model):
@@ -80,6 +91,7 @@ class Message(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_chat = models.BooleanField(default=False)
     is_favorite = models.BooleanField(default=False)
+    is_read = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Message: {self.user} to {self.chatroom} with text: {self.text}"
