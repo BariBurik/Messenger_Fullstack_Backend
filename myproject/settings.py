@@ -81,7 +81,7 @@ DATABASES = {
         'NAME': 'messenger',
         'USER': 'messenger_user',
         'PASSWORD': 'postgres',
-        'HOST': '95.163.230.130' if DEBUG else 'localhost',
+        'HOST': 'localhost',
         'PORT': '5432',
     }
 }
@@ -155,7 +155,7 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 CORS_EXPOSE_HEADERS = ["Set-Cookie", "Date"]
 
 GRAPHENE = {
-    "SCHEMA": "messenger.schema.schema",
+    "SCHEMA": "messenger.graphene.graphene_schema",
     "MIDDLEWARE": [
         'graphql_jwt.middleware.JSONWebTokenMiddleware',
         "messenger.middlewares.GrapheneAuthMiddleware",
