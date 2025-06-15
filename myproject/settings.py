@@ -142,8 +142,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:3000',
-    'http://95.163.230.130:3000',
+    'http://localhost:3000'
 ]
 
 CSRF_COOKIE_NAME = 'csrftoken'
