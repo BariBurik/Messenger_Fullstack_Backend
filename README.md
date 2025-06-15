@@ -28,6 +28,9 @@ venv\Scripts\activate         # Windows
 # Установка зависимостей
 pip install -r requirements.txt
 
+# Выполнение миграций
+ python manage.py migrate
+
 # Запуск сервера
 python manage.py runserver
 ```
