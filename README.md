@@ -1,9 +1,12 @@
-[Messenger](http://95.163.230.130)
+### Месенджер
 
-## Установка и запуск
+<p>Это проект, в котором реализован мессенджер, для того, чтобы проект работал, необходимо, также установить backend часть <a href="https://github.com/BariBurik/Messenger_Fullstack_Frontend">Messenger_Fullstack_Frontend</a></p>
 
-Для установки зависимостей и запуска приложения выполните следующие команды:
+### `npm install`
 
-```bash
-npm install
-npm start
+<p>для установки всех зависимостей</p>
+
+### `npm start`
+
+<p>для запуска приложения</p>
+
