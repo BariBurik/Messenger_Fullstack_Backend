@@ -81,7 +81,7 @@ DATABASES = {
         'NAME': 'messenger',
         'USER': 'messenger_user',
         'PASSWORD': 'postgres',
-        'HOST': '95.163.230.130' if DEBUG else 'localhost',
+        'HOST': 'localhost',
         'PORT': '5432',
     }
 }
@@ -142,8 +142,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:3000',
-    'http://95.163.230.130:3000',
+    'http://localhost:3000'
 ]
 
 CSRF_COOKIE_NAME = 'csrftoken'
