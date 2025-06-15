@@ -2,16 +2,22 @@
 
 <p>Это проект, в котором реализован мессенджер, для того, чтобы проект работал, необходимо, также установить backend часть <a href="https://github.com/BariBurik/Messenger_Fullstack_Frontend">Messenger_Fullstack_Frontend</a></p>
 
-<p>Предварительно необходимо выполнить следующие команды: 
-python -m venv venv         # Если venv не создан
-source venv/bin/activate    # Linux/macOS
-venv\Scripts\activate       # Windows</p>
+<p>Для запуска приложения, необходимо выполнить следующие команды: 
+```bash
+# Активация виртуального окружения
+source venv/bin/activate      # Linux/macOS
+venv\Scripts\activate         # Windows
 
-### `pip install -r requirements.txt`
+# Установка зависимостей
+pip install -r requirements.txt
 
-<p>для установки всех зависимостей</p>
+# Миграции
+python manage.py migrate
 
-### `python manage.py runserver`
+# Создание суперпользователя
+python manage.py createsuperuser
 
-<p>для запуска приложения</p>
-
+# Запуск сервера
+python manage.py runserver
+```
+</p>
